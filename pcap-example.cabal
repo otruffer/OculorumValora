@@ -19,7 +19,11 @@ library
   build-depends:       base >= 4.7 && < 5
                      , pcap
                      , bytestring
+                     , bytedump
                      , containers
+                     , binary-strict
+                     , binary
+                     , either-unwrap
   default-language:    Haskell2010
 
 executable pcap-example-exe
