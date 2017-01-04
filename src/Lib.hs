@@ -56,27 +56,28 @@ printPackage capturedLength wireLength body = do
     putStrLn $ macToName sourceAsString
     putStrLn "--------------------------"
     where
-        radioTapLength = extractRadioTapLength body
-        destAsString = ByteDump.dumpRaw $ B.unpack $ extractDestMacFromBS radioTapLength body
-        sourceAsString = ByteDump.dumpRaw $ B.unpack $ extractSourceMacFromBS radioTapLength body
+        radioTapLength = extractRadioTapLength body                                                 -- extract length of RadioTap Header. This is a header added in monitoring mode, we need to get rid of it.
+        destAsString = ByteDump.dumpRaw $ B.unpack $ extractDestMacFromBS radioTapLength body       -- extracts the destination mac address.
+        sourceAsString = ByteDump.dumpRaw $ B.unpack $ extractSourceMacFromBS radioTapLength body   -- extracts the source mac address.
 
+-- Make my hex strings pretty again. Probably doable with a fold...
 prettyHex :: String -> String
 prettyHex [] = []
 prettyHex (x:y:[]) = [x, y]
 prettyHex (x:y:rest) = [x, y, ':'] ++ (prettyHex rest)
 
 -- We expect to be in monitor mode thus we have a variable length radiotap header before the ethernet layer.
--- extractRadioTapLength :: B.ByteString -> Int
--- extractRadioTapLength = fromIntegral . B.unpack . B.head . B.drop 2
 extractRadioTapLength :: B.ByteString -> Int
 extractRadioTapLength body = fromRight $ fst $ runGet radioTapParser body
 
 -- We expect to be in monitor mode thus we have a variable length radiotap header before the ethernet layer.
 radioTapParser :: Get Int
 radioTapParser = do
-    skip 2
-    radioTabLength <- getWord8
-    return (fromIntegral(radioTabLength) :: Int)
+    skip 2                          -- First two bytes are other stuff.
+    radioTabLength <- getWord16le   -- 3rd and 4th byte are what we want! :-) Little endian: 12 00 is 18. ending comes first.
+    return (fromIntegral(radioTabLength) :: Int) -- Casting from 16 bit to 8 bit.... but i just hope the header is smaller than 256B, the once i've seen so far are around ~20B
+
+--TODO: The following two methods should be handled with the Get Byte Monad.
 
 -- Drops (radiotap header) + 4 (some ethernet stuff) + 6 (destination MAC) bytes then takes 6 bytes from the packet.
 -- These 6 bytes represent the source mac address
@@ -84,6 +85,7 @@ radioTapParser = do
 extractSourceMacFromBS :: Int -> B.ByteString -> B.ByteString
 extractSourceMacFromBS radioTapLength = B.take 6 . B.drop (radioTapLength + 4 + 6)
 
+-- Same for destination Mac Address
 extractDestMacFromBS :: Int -> B.ByteString -> B.ByteString
 extractDestMacFromBS radioTapLength = B.take 6 . B.drop (radioTapLength + 4)
 
